@@ -16,6 +16,11 @@ router.route("/signup").post(userController.signup);
 router.route("/verify-account/:verifyToken").get(userController.verifyAccount);
 router.route("/login").post(userController.login);
 
+// ROUTES TO RESET PASSWORD.
+
+router.route("/forgotPassword").post(userController.forgotPassword);
+router.route("/resetPassword/:token").patch(userController.resetPassword);
+
 // Exporting the router instance.
 
 module.exports = router;

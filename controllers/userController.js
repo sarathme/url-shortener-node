@@ -270,3 +270,167 @@ exports.login = catchAsync(async (req, res, next) => {
     },
   });
 });
+
+exports.forgotPassword = catchAsync(async (req, res, next) => {
+  // Read the email sent through the request body.
+
+  const { email } = req.body;
+
+  // If no email is present call the global erro handler.
+
+  if (!email) {
+    return next(new AppError("Please provide a email", 400));
+  }
+
+  // Connecting and selecting the database and collections.
+
+  await client.connect();
+
+  const db = client.db("url_shortener");
+  const userCollection = db.collection("users");
+
+  // Query the user with the provided email.
+
+  const user = await userCollection.findOne({ email });
+
+  // If no user exists with the email call the global error handler.
+
+  if (!user) {
+    next(new AppError("No user found with the email", 404));
+    await client.close();
+    return;
+  }
+
+  // Generate password reset token using builtin crypto package.
+
+  const resetToken = crypto.randomBytes(32).toString("hex");
+
+  // Create the hash of the reset token to store in the database.
+
+  const passwordResetToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+
+  // Set the reset token expiry.
+
+  const resetTokenExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  // Store the expiry and the hashed reset token in the user document.
+
+  await userCollection.findOneAndUpdate(
+    { _id: user._id },
+    {
+      $set: {
+        passwordResetToken,
+        resetTokenExpiresAt,
+      },
+    }
+  );
+
+  // Constuct a reset url to be sent through email. The reset token is not the hashed token.
+
+  const resetURL = `${req.headers["x-frontend-url"]}/resetPassword/${resetToken}`;
+
+  // Construct a message to send through the email with the reset url.
+
+  const message = `Forget your password? Please send a request with your new password ${resetURL}`;
+
+  // Send the email using node-mailer package. Please resfer email.js file in utils folder for node-mailer implementation.
+
+  try {
+    await sendEmail({
+      email: user.email,
+      subject: "Password reset Token (valid for 10 mins)",
+      message,
+    });
+
+    // Sending a success response when the email is sent successfully.
+
+    res.status(200).json({
+      status: "success",
+      message: "Email sent successfully",
+    });
+  } catch (err) {
+    // Clearing the reset token and expiry in the user document if the email is not sent.
+
+    await userCollection.findOneAndUpdate(
+      { _id: user._id },
+      {
+        $set: {
+          passwordResetToken: undefined,
+          resetTokenExpiresAt: undefined,
+        },
+      }
+    );
+    await client.close();
+
+    // Call the global error handling middleware to send error response.
+    console.log("Error:💥", err);
+    return next(new AppError("Problem sending email. Please try again", 500));
+  }
+});
+
+// Handler function for resetting the password.
+
+exports.resetPassword = catchAsync(async (req, res, next) => {
+  // Connect to the database and selecting the collection.
+
+  await client.connect();
+  const database = client.db("url_shortener");
+  const userCollection = database.collection("users");
+
+  // Create the hash using crypto package for the reset token reiced through the url.
+  // Inorder to compare with the hash in the database user document.
+
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(req.params.token)
+    .digest("hex");
+
+  // Check for the user with the hashed reset token in the user document and also check if the token is expired.
+
+  let user = await userCollection.findOne({
+    passwordResetToken: hashedToken,
+    resetTokenExpiresAt: { $gt: new Date(Date.now()) },
+  });
+
+  // If no user is found send an error response using global error handler.
+
+  if (!user) {
+    await client.close();
+    return next(new AppError("Token is invalid or expired", 400));
+  }
+
+  // If the user exists encrypt the password using bcrypt package.
+
+  const password = await bcrypt.hash(req.body.password, 12);
+
+  // Save the updated password in the user document and clear the reset token and expiry.
+
+  user = await userCollection.findOneAndUpdate(
+    { _id: user._id },
+    {
+      $set: {
+        password,
+        passwordResetToken: undefined,
+        resetTokenExpiresAt: undefined,
+      },
+    },
+    {
+      returnDocument: "after",
+      projection: {
+        passwordResetToken: 0,
+        resetTokenExpiresAt: 0,
+        password: 0,
+      },
+    }
+  );
+
+  // Send a success response with the jwt token and user.
+
+  res.status(200).json({
+    status: "success",
+    user,
+  });
+});
