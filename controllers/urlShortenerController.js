@@ -43,6 +43,7 @@ exports.shortenUrl = catchAsync(async (req, res, next) => {
     shortId,
     userId: req.user._id,
     shortUrl,
+    visited: 0,
   });
 
   const url = await urlCollection.findOne({ _id: newUrl.insertedId });
@@ -85,7 +86,13 @@ exports.redirectUrl = catchAsync(async (req, res, next) => {
   const database = client.db("url_shortener");
   const urlCollection = database.collection("urls");
 
-  const url = await urlCollection.findOne({ shortId });
+  const url = await urlCollection.findOneAndUpdate(
+    { shortId },
+    { $inc: { visited: 1 } },
+    {
+      returnDocument: "after",
+    }
+  );
 
   if (!url) {
     await client.close();

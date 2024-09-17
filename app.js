@@ -32,7 +32,7 @@ app.use("/api/v1/users", userRouter);
 // ROUTES FOR THE SHORTENING URLs.
 app.use("/api/v1/shorten", urlShortenerRouter);
 
-app.use("/api/v1/redirect/:shortId", urlController.redirectUrl);
+app.use("/:shortId", urlController.redirectUrl);
 
 // FALLBACK ROUTE FOR THE UNDEFINED ROUTES.
 
