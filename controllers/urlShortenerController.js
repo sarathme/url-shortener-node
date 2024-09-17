@@ -73,6 +73,7 @@ exports.getUrls = catchAsync(async (req, res, next) => {
     status: "success",
     data: {
       urls,
+      user: req.user,
     },
   });
 });
