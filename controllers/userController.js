@@ -94,7 +94,7 @@ exports.signup = catchAsync(async (req, res, next) => {
 
   const verifyURL = `${req.protocol}://${req.get(
     "host"
-  )}/verify-account/${verifyToken}`;
+  )}/api/v1/users/verify-account/${verifyToken}`;
 
   // Construct a message to send through the email with the verify url.
 
@@ -141,7 +141,7 @@ exports.signup = catchAsync(async (req, res, next) => {
 
 exports.verifyAccount = catchAsync(async (req, res, next) => {
   const { verifyToken } = req.params;
-
+  console.log(verifyToken);
   // Create the hash of the verify token to check for the hashed token in database.
 
   const verifyTokenHash = crypto
@@ -179,7 +179,9 @@ exports.verifyAccount = catchAsync(async (req, res, next) => {
 
   if (checkUser.active) {
     await client.close();
-    return next(new AppError("Account already verified", 400));
+    return res
+      .status(301)
+      .redirect(`${process.env.FRONTEND_DOMAIN}/alreadyVerified`);
   }
 
   // If user is not activated then activate the user.
@@ -203,13 +205,9 @@ exports.verifyAccount = catchAsync(async (req, res, next) => {
     expiresIn: process.env.JWT_EXPIRES_IN,
   });
 
-  res.status(200).json({
-    status: "success",
-    token,
-    data: {
-      user,
-    },
-  });
+  res
+    .status(301)
+    .redirect(`${process.env.FRONTEND_DOMAIN}/verify-account/${token}`);
 });
 
 // handler function for logging in users.
@@ -433,4 +431,62 @@ exports.resetPassword = catchAsync(async (req, res, next) => {
     status: "success",
     user,
   });
+});
+
+exports.protect = catchAsync(async (req, res, next) => {
+  let token;
+
+  // Reading the token from the authorization header
+
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer")
+  ) {
+    token = req.headers.authorization.split(" ")[1];
+  }
+
+  // Check if the token exists if not call the global error handling middleware.
+
+  if (!token) {
+    return next(
+      new AppError("You are not logged in. Please login to continue", 401)
+    );
+  }
+
+  // Verify the token if it is expired send error response using global error handling middleware.
+
+  let decoded;
+  try {
+    decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return next(
+      new AppError("Session expired. Please login again to continue", 401)
+    );
+  }
+
+  // Connecting database and selecting users collection.
+
+  await client.connect();
+  const database = client.db("url_shortener");
+  const userCollection = database.collection("users");
+
+  // Check if the user exists
+  const currentUser = await userCollection.findOne({
+    _id: new ObjectId(decoded.id),
+  });
+
+  // If the user doen't exists send an error response using the global error handler.
+
+  if (!currentUser) {
+    await client.close();
+    return next(new AppError("User doesn't exists or invalid token", 401));
+  }
+
+  // Setting the user in the request.
+
+  req.user = currentUser;
+
+  // Call the next middleware in the stack.
+
+  next();
 });

@@ -5,6 +5,9 @@ const globalErrorHandler = require("./controllers/errorController");
 const AppError = require("./utils/appError");
 
 const userRouter = require("./routes/userRoutes");
+const urlShortenerRouter = require("./routes/urlShortenerRoutes");
+
+const urlController = require("./controllers/urlShortenerController");
 
 // Calling the express function.
 
@@ -25,6 +28,11 @@ app.use(express.json());
 // ROUTES FOR THE USERS.
 
 app.use("/api/v1/users", userRouter);
+
+// ROUTES FOR THE SHORTENING URLs.
+app.use("/api/v1/shorten", urlShortenerRouter);
+
+app.use("/api/v1/redirect/:shortId", urlController.redirectUrl);
 
 // FALLBACK ROUTE FOR THE UNDEFINED ROUTES.
 
