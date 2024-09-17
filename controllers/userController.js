@@ -141,7 +141,7 @@ exports.signup = catchAsync(async (req, res, next) => {
 
 exports.verifyAccount = catchAsync(async (req, res, next) => {
   const { verifyToken } = req.params;
-  console.log(verifyToken);
+
   // Create the hash of the verify token to check for the hashed token in database.
 
   const verifyTokenHash = crypto

@@ -1,5 +1,6 @@
 const { nanoid } = require("nanoid");
 const { MongoClient } = require("mongodb");
+const validUrl = require("valid-url");
 
 const { catchAsync } = require("../utils/catchAsync");
 const AppError = require("../utils/appError");
@@ -21,6 +22,11 @@ exports.shortenUrl = catchAsync(async (req, res, next) => {
   if (!originalUrl) {
     await client.close();
     return next(new AppError("Please provide a url", 400));
+  }
+
+  if (!validUrl.isUri(originalUrl)) {
+    await client.close();
+    return next(new AppError("Please provide a valid URL", 400));
   }
 
   const shortId = nanoid(10);
